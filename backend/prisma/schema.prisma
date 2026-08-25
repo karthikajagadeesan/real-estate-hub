@@ -1,0 +1,123 @@
+datasource db {
+  provider = "postgresql"
+}
+
+
+generator client {
+  provider = "prisma-client-js"
+  // Prisma Client 7.x uses TypeScript-native architecture (no Rust engine binary)
+  // Significantly faster cold starts and smaller bundle size
+}
+
+enum Role {
+  USER
+  AGENT
+  ADMIN
+}
+
+enum PropertyType {
+  APARTMENT
+  VILLA
+  PLOT
+  COMMERCIAL
+  INDEPENDENT_HOUSE
+}
+
+enum ListingType {
+  SELL
+  RENT
+}
+
+enum PropertyStatus {
+  AVAILABLE
+  PENDING
+  SOLD
+  RENTED
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         Role           @default(USER)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  properties   Property[]
+  refreshTokens RefreshToken[]
+  inquiries    Inquiry[]      @relation("SentInquiries")
+
+  @@index([email])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Property {
+  id           String         @id @default(uuid())
+  title        String
+  description  String
+  propertyType PropertyType
+  listingType  ListingType    @default(SELL)
+  price        Float
+  city         String
+  location     String
+  address      String?
+  zipCode      String?
+  bedrooms     Int            @default(1)
+  bathrooms    Int            @default(1)
+  areaSqFt     Float
+  amenities    String[]       @default([])
+  images       String[]       @default([])
+  status       PropertyStatus @default(AVAILABLE)
+  viewsCount   Int            @default(0)
+  
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  
+  inquiries    Inquiry[]
+
+  // Indexes for ultra-fast filtering across 50,000+ records
+  @@index([city])
+  @@index([propertyType])
+  @@index([price])
+  @@index([bedrooms])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([city, propertyType, price])
+  @@index([city, bedrooms])
+}
+
+model Inquiry {
+  id           String   @id @default(uuid())
+  propertyId   String
+  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  senderUserId String?
+  sender       User?    @relation("SentInquiries", fields: [senderUserId], references: [id], onDelete: SetNull)
+  
+  name         String
+  email        String
+  phone        String
+  message      String
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  // Index for rapid duplicate detection and rate limiting
+  @@index([propertyId, email, createdAt])
+  @@index([propertyId])
+}
